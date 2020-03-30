@@ -12,15 +12,15 @@ Code:
 * plot_AB_glaciers.m: function which plots glaciers in Alberta, for making figures
 
 Data:
-* Canada_Borders
-* Rivers_Lakes
-* AB_city_intake_dam_vars.mat
-* AB_climate_vars.mat
-* AB_glacier_fed_rivers.mat
-* AB_rgi.mat
-* AB_topo_lowres.mat
-* flow_vars.mat
-* stream_gauge_vars.mat
+* Canada_Borders: shapefiles of Canadian provinces
+* Rivers_Lakes: shapefiles of Canadian rivers, from HYDAT database
+* AB_city_intake_dam_vars.mat: data of municipalities/dams (e.g. locations, elevations, etc)
+* AB_climate_vars.mat: climate data for Alberta and at specific locations of dams/communities/stream gauges
+* AB_glacier_fed_rivers.mat: lat/lon of glacier-fed-rivers (already routed through DEM), and names of glacier-fed rivers
+* AB_rgi.mat: glacier data from Randolph Glacier Inventory
+* AB_topo_lowres.mat: low-resolution topography (processed from Shuttle Radar Topography Mission; lowres as just used for plotting)
+* flow_vars.mat: processed flow variables from HYDAT database (e.g. normalized/non-normalized seasonal/yearly discharge for 194 stream gauges)
+* stream_gauge_vars.mat: data of stream gauges (e.g. drainage area, location, etc.)
 
 ## Requirements
 
