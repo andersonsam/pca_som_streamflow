@@ -31,7 +31,7 @@ end
 
 %% smooth streamflow data
 
-smooth_window = 30;  
+smooth_window = 30; %length of smoothing window to use
 for kk = 1:length(flow_years_norm(:,1)) %for each station/year, smooth
     flow_years_norm_smooth(kk,:) = movmean(flow_years_norm(kk,:), smooth_window);
 end
@@ -46,18 +46,53 @@ fracVarF = eigvalsF/sum(eigvalsF); %calculate the fraction of variance explained
 %% Convert PCs into complex coordinates to cluster using SOM
 
 complex_coord = PCsF(:,1) + 1i*PCsF(:,2);
-complex_coord = reshape(complex_coord,[],length(stationLat))';
+complex_coord = reshape(complex_coord,[],length(stationLat))'; %each row is PC1 + iPC2 for each station
 
 %% Cluster using a SOM
+
+%%%%%
+% NOTE: in som_batchtrain.m, the calculation of Dist/ddists/bmus was modified to the following for calculation of distance in complex space:
+%
+% if isreal(D)
+%     i0 = 0;
+%     while i0+1<=dlen,
+%         inds = [(i0+1):min(dlen,i0+blen)]; i0 = i0+blen;
+%         Dist = (M.^2)*W1(:,inds) - M*WD(:,inds);
+%         [ddists(inds), bmus(inds)] = min(Dist);
+%     end
+% else
+%     Dist = zeros(munits,dlen);
+%     for ii = 1:dlen %for each vector to cluster
+%         for jj = 1:munits %for each BMU
+%             for kk = 1:dim %for each point in the vector
+%                 Dist(jj,ii) = Dist(jj,ii) + (abs(M(jj,kk) - D(ii,kk)))^2;
+%             end
+%         end
+%     end
+%     [ddists, bmus] = min(Dist);
+% end
+%%%%%
 
 somInput = complex_coord;
 [en,nx_som,ny_som] = get_numberOfPatterns(somInput); %determine the number of nodes/size of map to use
 [sM, sT, sMap, bmus] = do_SOM(somInput, nx_som, ny_som); %make SOM with this map size
 
 %determine RGB colours to use for...
-cbmus = som_colorcode(sM,'rgb2'); %... each cluster
+cmap2d = double(imread('./data/teulingfig2.png')); %2D colourmap to use, from Steiger et al (2015), "Explorative Analysis of 2D Color Maps"
+kk = 1;
+%... each cluster
+cbmus = zeros(en,3);
+for col_som = 1:nx_som
+    for row_som = 1:ny_som
+        row_cmap = round(length(cmap2d(:,1,1)) / ny_som * (row_som - 0.5));
+        col_cmap = round(length(cmap2d(1,:,1)) / nx_som * (col_som - 0.5));
+        cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        kk = kk+1;
+    end
+end
+%... and each station
 for kk = 1:length(somInput(:,1))
-    cStations(kk,:) = cbmus(bmus(kk),:); %... and each station
+    cStations(kk,:) = cbmus(bmus(kk),:);
 end
     
 %% Name PC1/2, meanPC1/2, and stdPC1/2 for ease of use
@@ -114,8 +149,8 @@ damData_norm = zeros(size(damData));
 intakeData_norm = zeros(size(intakeData));
 for kk = 1:length(data(1,:))
     data_norm(:,kk) = (data(:,kk) - mean(data(:,kk)))/std(data(:,kk));  
-    intakeData_norm(:,kk) = (intakeData(:,kk) - nanmean(data(:,kk)))/nanstd(data(:,kk));
-    damData_norm(:,kk) = (damData(:,kk) - nanmean(data(:,kk)))/nanstd(data(:,kk));
+    intakeData_norm(:,kk) = (intakeData(:,kk) - nanmean(data(:,kk)))/nanstd(data(:,kk)); %wrt station data
+    damData_norm(:,kk) = (damData(:,kk) - nanmean(data(:,kk)))/nanstd(data(:,kk)); %wrt station data
 end
 
 
@@ -756,8 +791,6 @@ set(gca,'FontSize',figFS)
 
 %figure 2, panel b: SOM clusters
 
-C = som_colorcode(sM,'rgb2');
-
 subplot(2,1,2), hold on
 
 plot_rivers()
@@ -792,8 +825,21 @@ ylim([minLat,maxLat])
 %%
 %figure 2, panel c: SOM patterns
 
+cmap2d = double(imread('./data/teulingfig2.png'));
+kk = 1;
+%... each cluster
+cbmus = zeros(en,3);
+for col_som = 1:nx_som
+    for row_som = 1:ny_som
+        row_cmap = round(length(cmap2d(:,1,1)) / ny_som * (row_som - 0.5));
+        col_cmap = round(length(cmap2d(1,:,1)) / nx_som * (col_som - 0.5));
+        cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        kk = kk+1;
+    end
+end
+
 figure('Position',[0,0,1000,1200]), hold on
-h = som_cplane(sM,C);
+h = som_cplane(sM,cbmus);
 h.FaceAlpha = 0.7;
 titlestr = sprintf('SOM With Clusters in PC-Space');
 title(titlestr)
@@ -962,10 +1008,15 @@ Ylim = 2.2;
 
 subplot(2,2,4),hold on
 
-RGB = brewermap([],'RdYlBu');
-RGBdam = RGB(10,:);
-RGBhinton = RGB(53,:);
-RGBll = RGB(64,:);
+Ncolours = 3;
+RGB = brewermap(Ncolours,'Set1'); %Dark2
+RGBdam = RGB(1,:);
+RGBhinton = RGB(2,:);
+RGBll = RGB(3,:);
+% RGB = brewermap([],'RdYlBu');
+% RGBdam = RGB(10,:);
+% RGBhinton = RGB(53,:);
+% RGBll = RGB(64,:);
 
 lw = 5;
 plot(dam_Q_x_interp,dam_Q_kde_glaciers_interp(indBighorn_dam,:),'color',RGBdam,'LineWidth',lw)
@@ -1102,15 +1153,29 @@ nx_som = 1;
 en = nx_som*ny_som;
 [sM, sT, sMap, bmus] = do_SOM(data, nx_som, ny_som);
 
-cbmus = som_colorcode(sM,'rgb2'); %rgb colours of clusters
+cmap2d = double(imread('./data/teulingfig2.png'));
+kk = 1;
+cbmus = zeros(en,3);
+for col_som = 1:nx_som
+    for row_som = 1:ny_som
+        row_cmap = round(length(cmap2d(:,1,1)) / ny_som * (row_som - 0.5));
+        col_cmap = round(length(cmap2d(1,:,1)) / nx_som * (col_som - 0.5));
+        cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        kk = kk+1;
+    end
+end
+
+%bmap = 'Set1';
+%cbmus = som_colorcode(sM,'rgb2'); %rgb colours of clusters
+%cbmus = brewermap(en,bmap);
 for kk = 1:length(data(:,1))
     cStations(kk,:) = cbmus(bmus(kk),:); %rgb colours of stations
 end
 
-figure('Position',[0,0,1600,600])
+figure('Position',[0,0,1200,400])
 
 subplot(1,2,1)
-plot_rivers()
+%plot_rivers()
 plot_AB_glaciers(10,glacierRGB);
 plot_AB()
 stationplot = scatter(stationLon,stationLat,150,'filled','LineWidth',2,'MarkerEdgeColor','k');
@@ -1149,14 +1214,26 @@ nx_som = 3;
 en = nx_som*ny_som;
 [sM, sT, sMap, bmus] = do_SOM(data, nx_som, ny_som);
 
-cbmus = som_colorcode(sM,'rgb2'); %rgb colours of clusters
+kk = 1;
+cbmus = zeros(en,3);
+for col_som = 1:nx_som
+    for row_som = 1:ny_som
+        row_cmap = round(length(cmap2d(:,1,1)) / ny_som * (row_som - 0.5));
+        col_cmap = round(length(cmap2d(1,:,1)) / nx_som * (col_som - 0.5));
+        cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        kk = kk+1;
+    end
+end
+
+%cbmus = som_colorcode(sM,'rgb2'); %rgb colours of clusters
+%cbmus = brewermap(en,bmap);
 for kk = 1:length(data(:,1))
     cStations(kk,:) = cbmus(bmus(kk),:); %rgb colours of stations (according to their cluster)
 end
 
 
 subplot(1,2,2)
-plot_rivers()
+%plot_rivers()
 plot_AB_glaciers(10,glacierRGB);
 plot_AB()
 stationplot = scatter(stationLon,stationLat,150,'filled','LineWidth',2,'MarkerEdgeColor','k');
@@ -1354,10 +1431,13 @@ for kk = 1:2 %for each predictand
     subplot(1,2,kk), hold on
     
     kdedata = horzcat(models.a{:,kk});
+    Ncolours = length(kdedata(:,1))-1;
+    colours = brewermap(Ncolours,'Dark2');
+    
     for jj = 2:length(kdedata(:,kk)) %for each predictor, make kde; don't include a(1) values (ie: intercepts)
         [kde,XI] = ksdensity(kdedata(jj,:));
-        p = plot(XI,kde);
-        p.LineWidth = 4;
+        p = plot(XI,kde,'color',colours(jj-1,:));
+        p.LineWidth = 5;
     end
     xlabel('Regression Coefficient')
     ylabel('Probability')
@@ -1392,6 +1472,7 @@ for kk = 1:2 %for each predictand
         text(textX,textY,'b)','fontsize',figFS)
         leg = legend(labels(inds2),'Interpreter','latex','location','best');
     end
+    
     set(gca,'fontsize',figFS)
 end
 
@@ -1523,7 +1604,7 @@ ylim([ymin,ymax])
 text(textx,texty,'d)','fontsize',figFS)
 set(gca,'fontsize',figFS)
 
-%% physical interpretation of PC1 (and PC2?)
+%% physical interpretation of PC1
 
 %calc slope of august flow
 
@@ -1535,48 +1616,6 @@ for kk = 1:length(pcaInputF(:,1))
     slope(kk) = a(2);
 end
 
-%%
-% n = 100;
-% gridx1 = linspace(min(PCsF(:,1)),max(PCsF(:,1)),n);
-% x = mean(flow_years_norm_smooth(:,summerInds),2);
-% gridx2 = linspace(min(x),max(x),n);
-% [x1,x2] = meshgrid(gridx1,gridx2);
-% x1 = x1(:);
-% x2 = x2(:);
-% xi = [x1 x2];
-% xdata = [PCsF(:,1),x];
-% 
-% kde1 = ksdensity(xdata,xi);
-% k1 = reshape(kde1,[n,n]);
-% 
-% for kk = 1:length(PCsF(:,1)) %find kde value
-%     dPC = abs(PCsF(kk,1) - gridx1);
-%     dF = abs(x(kk) - gridx2);
-%     [~,indPC] = min(dPC);
-%     [~,indF] = min(dF);
-%     z1(kk,1) = k1(indF,indPC);
-% end
-% 
-% n = 100;
-% gridx1 = linspace(min(PCsF(:,2)),max(PCsF(:,2)),n);
-% x = slope';
-% gridx2 = linspace(min(x),max(x),n);
-% [x1,x2] = meshgrid(gridx1,gridx2);
-% x1 = x1(:);
-% x2 = x2(:);
-% xi = [x1 x2];
-% xdata = [PCsF(:,2),x];
-% 
-% kde2 = ksdensity(xdata,xi);
-% k2 = reshape(kde2,[n,n]);
-% 
-% for kk = 1:length(PCsF(:,2)) %find kde value
-%     dPC = abs(PCsF(kk,2) - gridx1);
-%     dF = abs(x(kk) - gridx2);
-%     [~,indPC] = min(dPC);
-%     [~,indF] = min(dF);
-%     z2(kk,1) = k2(indF,indPC);
-% end
 
 figure('Position',[0,0,1000,400])
 
@@ -1611,15 +1650,25 @@ en=ny_som*nx_som;
 Bmus = som_bmus(sM,sD); %best matching units of each node
 
 % plot colored SOM (with actual hexagonal nodes)
-%  and distance among neigbouring nodes
 U = som_umat(sM);
 Um = U(1:2:size(U,1),1:2:size(U,2));
-C = som_colorcode(sM,'rgb2');
+cmap2d = double(imread('./data/teulingfig2.png'));
+kk = 1;
+cbmus = zeros(en,3);
+for col_som = 1:nx_som
+    for row_som = 1:ny_som
+        row_cmap = round(length(cmap2d(:,1,1)) / ny_som * (row_som - 0.5));
+        col_cmap = round(length(cmap2d(1,:,1)) / nx_som * (col_som - 0.5));
+        %cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        cbmus(kk,:) = cmap2d(row_cmap,col_cmap,:)/255;
+        kk = kk+1;
+    end
+end
 
 myhits = som_hits(sM,sD); %number of nodes in each BMU
 [inbNaN dummy]=find(myhits == 0);
 
-C0=C;
+C0=cbmus;
 C0(inbNaN,1)=1;
 C0(inbNaN,2)=1;
 C0(inbNaN,3)=1;
@@ -1627,7 +1676,6 @@ C0(inbNaN,3)=1;
 %do PCA on the SOM nodes
 [eigvec, pcs, eigvals] = pca(sM.codebook);
 pc_topo = sqrt(pcs(:,1).^2 + pcs(:,2).^2);
-
 pc_topo_mat = reshape(pc_topo,ny_som,nx_som);
 
 if sum(sum(imag(pc_topo_mat)))==0 %if real pc matrix
@@ -1654,7 +1702,7 @@ title('Locations of Local Maxima and Global Minima')
 set(gca,'xticklabel',[])
 colorbar
 
-figure('Position',[0,0,1200,1000])
+figure('Position',[0,0,1200,750])
 subplot(1,2,1)
 som_cplane(sM,C0);
 title('Large SOM')
@@ -1665,11 +1713,12 @@ text(textx,texty,'a)','fontsize',figFS)
 set(gca,'FontSize',figFS)
 
 subplot(1,2,2)
-som_cplane(sM,abs(pc_topo));
+s = som_cplane(sM,log(abs(pc_topo)));
+colormap(brewermap([],'Blues'))
 title('PC1^2 + PC2^2 of Large SOM Patterns')
 set(gca,'xticklabel',[])
 cb = colorbar;
-ylabel(cb,'PC_1^2 + PC_2^2')
+ylabel(cb,'log(PC_1^2 + PC_2^2)')
 text(textx,texty-0.1,'b)','fontsize',figFS)
 set(gca,'FontSize',figFS)
 
